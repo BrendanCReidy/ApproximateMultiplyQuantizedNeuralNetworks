@@ -31,6 +31,8 @@ class ApproximateNeuralNetwork:
                 curr = conv2d(curr, weights, bias, self.nofbits, self.mult_wd)
             elif layerName=="flatten":
                 curr = curr.flatten()
+            elif layerName=="max_pooling2d":
+                curr = max_pooling2d(curr, weights, bias)
         return curr
 
     def setMultWD(self, value):
@@ -123,6 +125,32 @@ def multiplyNumbers(a,b,nofbits,mult_wd):
         return -1*unsigned_result
     return unsigned_result
 
+def max_pooling2d(inp, pool_size, strides):
+  if(len(inp.shape)==2):
+    inp = np.expand_dims(inp, axis=2)
+  return max_pooling2d_3d(inp, pool_size, strides)
+def max_pooling2d_3d(inp, pool_size, strides):
+  (inp_w, inp_h, inp_l) = inp.shape
+  (pool_w, pool_h) = pool_size
+  (stride_x, stride_y) = strides
+  out_x = int(inp_w / stride_x) - (pool_w - stride_x)
+  out_y = int(inp_h / stride_y) - (pool_h - stride_y)
+  out_matrix = np.zeros((out_x, out_y, inp_l))
+  for z in range(inp_l):
+    x_index = 0
+    for x in range(0,inp_w, stride_x):
+      y_index = 0
+      for y in range(0,inp_h, stride_y):
+        currMax = -999999999
+        for filter_x in range(pool_w):
+          for filter_y in range(pool_h):
+            currMax = max(currMax, inp[x+filter_x][y+filter_y][z])
+        out_matrix[x_index][y_index][z] = currMax
+        y_index+=1
+      x_index+=1
+
+  return out_matrix
+
 def conv2d(inp, weights, bias, nofbits, mult_wd):
   if(len(inp.shape)==2):
     return conv2d_2d(inp, weights, bias, nofbits, mult_wd)
@@ -191,6 +219,10 @@ def getBareBonesModel(model, quantization_precision):
         try:
             if(layer.name=="flatten"):
                 barebones_model.append(("flatten", [], []))
+            elif(layer.name[:len("max_pooling2d")]=="max_pooling2d"):
+                pool_size = layer.pool_size
+                strides = layer.strides
+                barebones_model.append(("max_pooling2d", pool_size, strides))
             elif(layer.name[:len("dense")]=="dense" or layer.name[:len("conv2d")]=="conv2d"):
                 weights = to_int(layer.weights[0].numpy(), quantization_precision)
                 bias = to_int(layer.weights[1].numpy(), quantization_precision)
