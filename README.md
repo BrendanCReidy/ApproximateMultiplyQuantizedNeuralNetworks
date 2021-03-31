@@ -22,3 +22,4 @@ nofbits # default 8, number of bits for weights, bias, and activations
 * dense
 * conv2d (only with relu activation)
 * flatten
+* reshape (is simply ignored)
