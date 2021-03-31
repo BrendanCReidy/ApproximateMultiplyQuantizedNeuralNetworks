@@ -33,6 +33,8 @@ class ApproximateNeuralNetwork:
                 curr = curr.flatten()
             elif layerName=="max_pooling2d":
                 curr = max_pooling2d(curr, weights, bias)
+            elif layerName=="average_pooling2d":
+                curr = avg_pooling2d(curr, weights, bias)
         return curr
 
     def setMultWD(self, value):
@@ -124,6 +126,33 @@ def multiplyNumbers(a,b,nofbits,mult_wd):
     if (sign_a ^ sign_b):
         return -1*unsigned_result
     return unsigned_result
+
+def avg_pooling2d(inp, pool_size, strides):
+  if(len(inp.shape)==2):
+    inp = np.expand_dims(inp, axis=2)
+  return avg_pooling2d_3d(inp, pool_size, strides)
+def avg_pooling2d_3d(inp, pool_size, strides):
+    (inp_w, inp_h, inp_l) = inp.shape
+    (pool_w, pool_h) = pool_size
+    (stride_x, stride_y) = strides
+    out_x = int(inp_w / stride_x) - (pool_w - stride_x)
+    out_y = int(inp_h / stride_y) - (pool_h - stride_y)
+    out_matrix = np.zeros((out_x, out_y, inp_l))
+    for z in range(inp_l):
+        x_index = 0
+        for x in range(0,inp_w, stride_x):
+            y_index = 0
+            for y in range(0,inp_h, stride_y):
+                avgAcc = 0
+                k = 0
+                for filter_x in range(pool_w):
+                    for filter_y in range(pool_h):
+                        avgAcc += inp[x+filter_x][y+filter_y][z]
+                        k+=1
+                out_matrix[x_index][y_index][z] = int(avgAcc / k)
+                y_index+=1
+            x_index+=1
+    return out_matrix
 
 def max_pooling2d(inp, pool_size, strides):
   if(len(inp.shape)==2):
@@ -223,6 +252,10 @@ def getBareBonesModel(model, quantization_precision):
                 pool_size = layer.pool_size
                 strides = layer.strides
                 barebones_model.append(("max_pooling2d", pool_size, strides))
+            elif(layer.name[:len("average_pooling2d")]=="average_pooling2d"):
+                pool_size = layer.pool_size
+                strides = layer.strides
+                barebones_model.append(("average_pooling2d", pool_size, strides))
             elif(layer.name[:len("dense")]=="dense" or layer.name[:len("conv2d")]=="conv2d"):
                 weights = to_int(layer.weights[0].numpy(), quantization_precision)
                 bias = to_int(layer.weights[1].numpy(), quantization_precision)
