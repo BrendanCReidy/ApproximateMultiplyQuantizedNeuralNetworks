@@ -20,6 +20,6 @@ nofbits # default 8, number of bits for weights, bias, and activations
 
 ## Supported Layer Types:
 * dense
-* conv2d (only with relu activation)
+* conv2d (only with relu activation, and strides of (1,1))
 * flatten
 * reshape (is simply ignored)
