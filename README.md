@@ -13,7 +13,7 @@ Where model is a standard TensorFlow model
 
 Variables:
 ```
-quantization_precision # default 100, constant to multiply weights by to turn them into integers. Must be a power of 10 = 100
+quantization_precision # default 100, constant to multiply weights by to turn them into integers. Must be a power of 10
 mult_wd # default 3, number of bits to perform accurate multiply on
 nofbits # default 8, number of bits for weights, bias, and activations
 ```
