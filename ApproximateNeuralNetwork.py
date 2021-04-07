@@ -6,6 +6,7 @@ from tensorflow import keras
 
 from keras import Model
 from keras.layers import Dense, Dropout, Input
+import time
 
 class Error(Exception):
     pass
@@ -19,22 +20,27 @@ class ApproximateNeuralNetwork:
         self.mult_wd = mult_wd
         self.nofbits = nofbits
 
+        self.maximum = pow(2,nofbits-1)
+
         self.model = model
         self.barebones_model = getBareBonesModel(model, quantization_precision)
 
     def predict(self, inp):
         curr = inp
         for (layerName, weights, bias) in self.barebones_model:
+            #start = time.time()
             if layerName=="dense":
-                curr = dense(curr, weights, bias, self.nofbits, self.mult_wd)
+                curr = dense(curr, weights, bias, self.nofbits, self.mult_wd, self.maximum)
             elif layerName=="conv2d":
-                curr = conv2d(curr, weights, bias, self.nofbits, self.mult_wd)
+                curr = conv2d(curr, weights, bias, self.nofbits, self.mult_wd, self.maximum)
             elif layerName=="flatten":
                 curr = curr.flatten()
             elif layerName=="max_pooling2d":
                 curr = max_pooling2d(curr, weights, bias)
             elif layerName=="average_pooling2d":
                 curr = avg_pooling2d(curr, weights, bias)
+            #end = time.time()
+            #print("Time for", layerName, "is", str(end - start))
         return curr
 
     def setMultWD(self, value):
@@ -58,8 +64,7 @@ class ApproximateNeuralNetwork:
 
 
 
-def to_nofbits(int_num, nofbits):
-    maximum = pow(2,nofbits-1)
+def to_nofbits(int_num, nofbits, maximum):
     if(int_num<0):
         return min(abs(int_num), maximum)*-1
     return min(int_num, maximum)
@@ -93,12 +98,12 @@ def shamt(log_value, mult_wd):
         shamt = 0
     return shamt
 
-def multiplyNumbers(a,b,nofbits,mult_wd):
+def multiplyNumbers(a,b,nofbits,mult_wd, maximum):
     a = int(a)
     b = int(b)
 
-    a = to_nofbits(a, nofbits)
-    b = to_nofbits(b, nofbits)
+    a = to_nofbits(a, nofbits, maximum)
+    b = to_nofbits(b, nofbits, maximum)
 
     a_y, sign_a = twos_complement(a,nofbits)
     b_y, sign_b = twos_complement(b,nofbits)
@@ -146,9 +151,15 @@ def avg_pooling2d_3d(inp, pool_size, strides):
                 avgAcc = 0
                 k = 0
                 for filter_x in range(pool_w):
-                    for filter_y in range(pool_h):
-                        avgAcc += inp[x+filter_x][y+filter_y][z]
-                        k+=1
+                  if(filter_x+x >= inp_w):
+                    break
+                  for filter_y in range(pool_h):
+                    if(filter_y+y >= inp_h):
+                      break
+                    avgAcc += inp[x+filter_x][y+filter_y][z]
+                    k+=1
+                if(x_index >= out_x or y_index >= out_y):
+                  continue
                 out_matrix[x_index][y_index][z] = int(avgAcc / k)
                 y_index+=1
             x_index+=1
@@ -172,20 +183,26 @@ def max_pooling2d_3d(inp, pool_size, strides):
       for y in range(0,inp_h, stride_y):
         currMax = -999999999
         for filter_x in range(pool_w):
+          if(filter_x+x >= inp_w):
+            break
           for filter_y in range(pool_h):
+            if(filter_y+y >= inp_h):
+              break
             currMax = max(currMax, inp[x+filter_x][y+filter_y][z])
+        if(x_index >= out_x or y_index >= out_y):
+          continue
         out_matrix[x_index][y_index][z] = currMax
         y_index+=1
       x_index+=1
 
   return out_matrix
 
-def conv2d(inp, weights, bias, nofbits, mult_wd):
+def conv2d(inp, weights, bias, nofbits, mult_wd, maximum):
   if(len(inp.shape)==2):
-    return conv2d_2d(inp, weights, bias, nofbits, mult_wd)
-  return conv2d_3d(inp, weights, bias, nofbits, mult_wd)
+    return conv2d_2d(inp, weights, bias, nofbits, mult_wd, maximum)
+  return conv2d_3d(inp, weights, bias, nofbits, mult_wd, maximum)
 
-def conv2d_2d(inp, weights, bias, nofbits, mult_wd):
+def conv2d_2d(inp, weights, bias, nofbits, mult_wd, maximum):
   (inp_w, inp_h) = inp.shape
   weights = np.squeeze(weights)
   (filter_w, filter_h, num_filters) = weights.shape
@@ -198,12 +215,12 @@ def conv2d_2d(inp, weights, bias, nofbits, mult_wd):
           for filter_y in range(filter_h):
             inputValue = inp[x+filter_x][y+filter_y]
             kernalValue = weights[filter_x][filter_y][curr_filter]
-            newVal = multiplyNumbers(inputValue, kernalValue, nofbits, mult_wd)
+            newVal = multiplyNumbers(inputValue, kernalValue, nofbits, mult_wd, maximum)
             mult_acc += newVal
         out_matrix[x][y][curr_filter] = mult_acc + bias[curr_filter]
   return relu(out_matrix)
 
-def conv2d_3d(inp, weights, bias, nofbits, mult_wd):
+def conv2d_3d(inp, weights, bias, nofbits, mult_wd, maximum):
   (inp_l, inp_w, inp_h) = inp.shape
   weights = np.squeeze(weights)
   (filter_l, filter_w, filter_h, num_filters) = weights.shape
@@ -218,19 +235,19 @@ def conv2d_3d(inp, weights, bias, nofbits, mult_wd):
               for filter_y in range(filter_h):
                 inputValue = inp[z+filter_z][x+filter_x][y+filter_y]
                 kernalValue = weights[filter_z][filter_x][filter_y][curr_filter]
-                newVal = multiplyNumbers(inputValue, kernalValue, nofbits, mult_wd)
+                newVal = multiplyNumbers(inputValue, kernalValue, nofbits, mult_wd, maximum)
                 mult_acc += newVal
           out_matrix[z][x][curr_filter] = mult_acc + bias[curr_filter]
   return relu(out_matrix)
 
 # a simple dense layer
-def dense(inp, weights, bias, nofbits, mult_wd):
+def dense(inp, weights, bias, nofbits, mult_wd, maximum):
   (inp_len, out_len) = weights.shape
   out_matrix = np.zeros((out_len))
   for i in range(out_len):
     mult_acc = 0
     for j in range(inp_len):
-      mult_acc+=multiplyNumbers(inp[j],weights[j][i], nofbits, mult_wd)
+      mult_acc+=multiplyNumbers(inp[j],weights[j][i], nofbits, mult_wd, maximum)
     out_matrix[i] = mult_acc + bias[i]
   return out_matrix + bias
 
@@ -238,8 +255,7 @@ def dense(inp, weights, bias, nofbits, mult_wd):
 def relu(data):
   return np.maximum(data, 0)
 
-def to_int(data, quantization_precision = 100):
-    decimals = int(math.log10(quantization_precision))
+def to_int(data, quantization_precision = 100, decimals = 2):
     return (np.round(data, decimals=decimals)*quantization_precision).astype(int)
 
 def getBareBonesModel(model, quantization_precision):
