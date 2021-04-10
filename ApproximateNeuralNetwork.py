@@ -28,7 +28,7 @@ class ApproximateNeuralNetwork:
     def predict(self, inp):
         curr = inp
         for (layerName, weights, bias) in self.barebones_model:
-            #start = time.time()
+            start = time.time()
             if layerName=="dense":
                 curr = dense(curr, weights, bias, self.nofbits, self.mult_wd, self.maximum)
             elif layerName=="conv2d":
@@ -39,8 +39,8 @@ class ApproximateNeuralNetwork:
                 curr = max_pooling2d(curr, weights, bias)
             elif layerName=="average_pooling2d":
                 curr = avg_pooling2d(curr, weights, bias)
-            #end = time.time()
-            #print("Time for", layerName, "is", str(end - start))
+            end = time.time()
+            print("Time for", layerName, "is", str(end - start))
         return curr
 
     def setMultWD(self, value):
@@ -255,14 +255,15 @@ def dense(inp, weights, bias, nofbits, mult_wd, maximum):
 def relu(data):
   return np.maximum(data, 0)
 
-def to_int(data, quantization_precision = 100, decimals = 2):
+def to_int(data, quantization_precision = 100):
+    decimals = int(math.log10(quantization_precision))
     return (np.round(data, decimals=decimals)*quantization_precision).astype(int)
 
 def getBareBonesModel(model, quantization_precision):
     barebones_model = []
     for layer in model.layers:
         try:
-            if(layer.name=="flatten"):
+            if(layer.name[:len("flatten")]=="flatten"):
                 barebones_model.append(("flatten", [], []))
             elif(layer.name[:len("max_pooling2d")]=="max_pooling2d"):
                 pool_size = layer.pool_size
