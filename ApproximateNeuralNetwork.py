@@ -21,6 +21,7 @@ class ApproximateNeuralNetwork:
         self.nofbits = nofbits
 
         self.maximum = pow(2,nofbits-1)
+        print("MAX",self.maximum)
 
         self.model = model
         self.barebones_model = getBareBonesModel(model, quantization_precision)
@@ -39,8 +40,10 @@ class ApproximateNeuralNetwork:
                 curr = max_pooling2d(curr, weights, bias)
             elif layerName=="average_pooling2d":
                 curr = avg_pooling2d(curr, weights, bias)
-            end = time.time()
-            print("Time for", layerName, "is", str(end - start))
+            elif layerName=="batch_normalization":
+                curr = np.expand_dims(curr, axis=0)
+                curr = weights(curr)
+                curr = np.squeeze(curr)
         return curr
 
     def setMultWD(self, value):
@@ -99,6 +102,10 @@ def shamt(log_value, mult_wd):
     return shamt
 
 def multiplyNumbers(a,b,nofbits,mult_wd, maximum):
+    #a = to_nofbits(a, nofbits, maximum)
+    #b = to_nofbits(b, nofbits, maximum)
+    #return a*b
+    #"""
     a = int(a)
     b = int(b)
 
@@ -131,6 +138,7 @@ def multiplyNumbers(a,b,nofbits,mult_wd, maximum):
     if (sign_a ^ sign_b):
         return -1*unsigned_result
     return unsigned_result
+    #"""
 
 def avg_pooling2d(inp, pool_size, strides):
   if(len(inp.shape)==2):
@@ -160,7 +168,7 @@ def avg_pooling2d_3d(inp, pool_size, strides):
                     k+=1
                 if(x_index >= out_x or y_index >= out_y):
                   continue
-                out_matrix[x_index][y_index][z] = int(avgAcc / k)
+                out_matrix[x_index][y_index][z] = avgAcc / k#int(avgAcc / k)
                 y_index+=1
             x_index+=1
     return out_matrix
@@ -195,7 +203,7 @@ def max_pooling2d_3d(inp, pool_size, strides):
         y_index+=1
       x_index+=1
 
-  return out_matrix
+  return relu(out_matrix)
 
 def conv2d(inp, weights, bias, nofbits, mult_wd, maximum):
   if(len(inp.shape)==2):
@@ -258,12 +266,13 @@ def relu(data):
 def to_int(data, quantization_precision = 100):
     decimals = int(math.log10(quantization_precision))
     return (np.round(data, decimals=decimals)*quantization_precision).astype(int)
+    #return data
 
 def getBareBonesModel(model, quantization_precision):
     barebones_model = []
     for layer in model.layers:
         try:
-            if(layer.name[:len("flatten")]=="flatten"):
+            if(layer.name=="flatten"):
                 barebones_model.append(("flatten", [], []))
             elif(layer.name[:len("max_pooling2d")]=="max_pooling2d"):
                 pool_size = layer.pool_size
@@ -280,6 +289,10 @@ def getBareBonesModel(model, quantization_precision):
                     barebones_model.append(("conv2d", weights, bias))
                 elif(layer.name[:len("dense")]=="dense"):
                     barebones_model.append(("dense", weights, bias))
+            elif(layer.name[:len("batch_normalization")]=="batch_normalization"):
+                import batchNorm
+                batch = layer
+                barebones_model.append(("batch_normalization", batch, []))
             elif(layer.name[:len("reshape")]=="reshape"):
                 continue
             else:
