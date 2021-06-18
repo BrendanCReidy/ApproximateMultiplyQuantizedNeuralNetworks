@@ -24,4 +24,5 @@ nofbits # default 8, number of bits for weights, bias, and activations
 * avg_pooling2d
 * conv2d (only with relu activation, and strides of (1,1))
 * flatten
+* batch normalization
 * reshape (is simply ignored)
